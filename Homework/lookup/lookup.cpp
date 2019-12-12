@@ -1,7 +1,8 @@
 #include "router.h"
 #include <stdint.h>
 #include <stdlib.h>
-
+#include <map>
+#include <string.h>
 /*
   RoutingTable Entry 的定义如下：
   typedef struct {
@@ -17,7 +18,35 @@
   当 nexthop 为零时这是一条直连路由。
   你可以在全局变量中把路由表以一定的数据结构格式保存下来。
 */
+uint32_t rev32(uint32_t given) {
+    uint32_t tmp;
+    for (int i=0;i<4;++i){
+        tmp <<= 8;
+        tmp += given % 0xFF;        
+        given >>= 8;
+    }
+    return tmp;
+}
 
+typedef struct {    
+    uint32_t if_index; // 小端序，出端口编号
+    uint32_t nexthop; // 大端序，下一跳的 IPv4 地址
+} EntryData;
+typedef uint32_t ADDR;
+typedef uint32_t LEN;
+typedef std::map<ADDR, EntryData*> RoutingTable;
+RoutingTable table;
+
+const int MAX_SIZE = 1000;
+EntryData data_mem[MAX_SIZE];
+int MAX_LEN = 32;
+int pointer = 0;
+EntryData* allocate(){
+    //memset((void*)data_mem[pointer],0,MAX_LEN*sizeof(EntryData));
+    data_mem[pointer] = {0,0};
+    pointer+=MAX_LEN;
+    return &(data_mem[pointer-MAX_LEN]);
+}
 /**
  * @brief 插入/删除一条路由表表项
  * @param insert 如果要插入则为 true ，要删除则为 false
@@ -27,6 +56,25 @@
  * 删除时按照 addr 和 len 匹配。
  */
 void update(bool insert, RoutingTableEntry entry) {
+    uint32_t t_addr = entry.addr;
+    if (insert){
+        //insert
+        EntryData entry_data = {entry.if_index, entry.nexthop};
+        //EntryData* addr_entry = table.find(t_addr);
+        if (table.find(t_addr) != table.end()) {//found
+            table[t_addr][entry.len] = entry_data; //insert or rewrite
+        } else { //addr not found
+            EntryData* tmp = NULL;
+            tmp = allocate();
+            tmp[entry.len] = entry_data;
+            table.insert(RoutingTable::value_type(t_addr,tmp));
+        }
+    } else {
+        //EntryData* addr_entry = table.find(t_addr);
+        if (table.find(t_addr) != table.end()) { //exist
+            table[t_addr][entry.len] = {0,0};
+        }
+    }
   // TODO:
 }
 
@@ -39,7 +87,18 @@ void update(bool insert, RoutingTableEntry entry) {
  */
 bool query(uint32_t addr, uint32_t *nexthop, uint32_t *if_index) {
   // TODO:
-  *nexthop = 0;
-  *if_index = 0;
-  return false;
+    uint32_t t_addr = addr;
+    for (size_t i=0;i<32;i++){
+        //EntryData* addr_entry = table.find(t_addr);
+        if (table.find(t_addr) != table.end()) {//found
+            EntryData tmp = table[t_addr][32-i];
+            if (tmp.nexthop != 0 || tmp.if_index != 0){
+                *nexthop = tmp.nexthop;
+                *if_index = tmp.if_index;
+                return true;
+            }
+        }
+        t_addr = t_addr & ((1 << (32-i-1))-1); //remove the highest bit
+    }
+    return false;
 }
