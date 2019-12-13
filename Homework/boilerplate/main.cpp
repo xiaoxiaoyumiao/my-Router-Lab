@@ -116,6 +116,14 @@ int main(int argc, char *argv[]) {
 		printf("TIMER: START ASSEMBING OUTPUT FROM RIP PACKET.\n");
 		uint32_t len = assemble(&routingTablePacket, output);
 		printf("TIMER: START MULTICASTING.\n");
+		
+		for (int i=0;i<28;++i) {
+			  printf("%02x ",output[i]);
+			  if (i % 4 == 0){
+				  printf("\n");
+		    }
+	    }
+		  
 		iter = table.begin();
 		while (iter != table.end()) {			
 			for (int i=0;i<32;++i){			
@@ -211,6 +219,36 @@ int main(int argc, char *argv[]) {
 
           RipPacket resp;
           // TODO: fill resp
+		resp.command = 2;
+		//resp.numEntries = table.size();
+		RoutingTable::iterator iter;
+		
+		printf("TIMER: START CONSTRUCTING RIP PACKET.\n");
+		int index = 0;
+		int ele = 0;
+		iter = table.begin();		
+		while (iter != table.end()) {			
+			printf("TIMER: INDEX %d ELE %d\n", index, ele);
+			
+			if (iter->second != NULL) {
+				
+				for (int i=0;i<32;++i){			
+					//printf("TIMER: INDEX %d, ITER %d\n", index,i);
+					if (iter->second[i].metric != 17) { //valid data
+						RipEntry tmp;
+						tmp.addr = iter->first;
+						tmp.mask = len_to_mask(i);
+						tmp.nexthop = iter->second[i].nexthop; 
+						tmp.metric = iter->second[i].metric; 
+						resp.entries[index] = tmp;
+						index++;
+					}
+				}
+			}
+			iter++;
+			ele++;
+		}
+		resp.numEntries = index;
 
           // TODO: fill IP headers
 		  // version = 4, length = 5(*4byte)
@@ -263,6 +301,12 @@ int main(int argc, char *argv[]) {
           // TODO: checksum calculation for ip and udp
           // if you don't want to calculate udp checksum, set it to zero
 		  resetIPChecksum(output, total_len);
+		  for (int i=0;i<28;++i) {
+			  printf("%02x ",output[i]);
+			  if (i % 4 == 0){
+				  printf("\n");
+			  }
+		  }
 
           // send it back
           HAL_SendIPPacket(if_index, output, rip_len + 20 + 8, src_mac);
