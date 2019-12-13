@@ -113,29 +113,76 @@ int main(int argc, char *argv[]) {
 		}
 		routingTablePacket.numEntries = index;
 		
-		printf("TIMER: START ASSEMBING OUTPUT FROM RIP PACKET.\n");
-		uint32_t len = assemble(&routingTablePacket, output);
-		printf("TIMER: START MULTICASTING.\n");
-		
-		for (int i=0;i<28;++i) {
+		for (int i=0;i<N_IFACE_ON_BOARD;++i) {		
+			// version = 4, length = 5(*4byte)
+			output[0] = 0x45;
+			// type of service = 0
+			output[1] = 0x00;
+			// ID = 0
+			output[4] = 0;
+			output[5] = 0;
+			// flags, fragmented offset = 0
+			output[6] = 0;
+			output[7] = 0;
+			// time to live = 1
+			output[8] = 0x01;
+			// protocol = 17 (UDP)
+			output[9] = 0x11;
+
+			in_addr_t src_addr = addrs[i];
+			in_addr_t dst_addr = 0x090000E0;
+			// source address
+			output[12] = dst_addr & 0xFF;
+			output[13] = (dst_addr >> 8 ) & 0xFF;
+			output[14] = (dst_addr >> 16) & 0xFF;
+			output[15] = (dst_addr >> 24) & 0xFF;
+			//dest address
+			output[16] = src_addr & 0xFF;
+			output[17] = (src_addr >> 8 ) & 0xFF;
+			output[18] = (src_addr >> 8 ) & 0xFF;
+			output[19] = (src_addr >> 8 ) & 0xFF;		  		  		 
+
+			// TODO: fill UDP headers
+			// port = 520
+			output[20] = 0x02;
+			output[21] = 0x08;
+			output[22] = 0x02;
+			output[23] = 0x08;
+			// UDP checksum = 0
+			output[26] = 0x00;
+			output[27] = 0x00;
+
+			// assembleRIP
+			uint32_t rip_len = assemble(&routingTablePacket, &output[20 + 8]);
+			uint32_t total_len = rip_len + 28;
+			uint32_t udp_len = rip_len + 8;
+			//set total length
+			output[2] = total_len >> 8;
+			output[3] = total_len & 0xFF;
+			//set UDP length
+			output[24] = udp_len >> 8;
+			output[25] = udp_len & 0xFF;
+
+			// TODO: checksum calculation for ip and udp
+			// if you don't want to calculate udp checksum, set it to zero
+			resetIPChecksum(output, total_len);
+
+			printf("TIMER: START ASSEMBING OUTPUT FROM RIP PACKET.\n");
+			uint32_t len = assemble(&routingTablePacket, output);
+			printf("TIMER: START MULTICASTING.\n");
+
+			for (int i=0;i<28;++i) {
 			  printf("%02x ",output[i]);
 			  if (i % 4 == 0){
 				  printf("\n");
-		    }
-	    }
-		  
-		iter = table.begin();
-		while (iter != table.end()) {			
-			for (int i=0;i<32;++i){			
-				if (iter->second[i].metric != 17 && iter->second[i].nexthop == 0) { //direct link
-					HAL_SendIPPacket(iter->second[i].if_index,
-						output,
-						len,
-						multi_dst_mac);
-				}
+			  }
 			}
-			iter++;
-		}			
+			HAL_SendIPPacket(i,
+				output,
+				total_len,
+				multi_dst_mac);
+			
+		}		
 		// TODO: send complete routing table to every interface
 		// ref. RFC2453 Section 3.8
 		// multicast MAC for 224.0.0.9 is 01:00:5e:00:00:09
