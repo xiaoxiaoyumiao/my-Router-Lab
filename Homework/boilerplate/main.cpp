@@ -132,15 +132,15 @@ int main(int argc, char *argv[]) {
 			in_addr_t src_addr = addrs[i];
 			in_addr_t dst_addr = 0x090000E0;
 			// source address
-			output[12] = dst_addr & 0xFF;
-			output[13] = (dst_addr >> 8 ) & 0xFF;
-			output[14] = (dst_addr >> 16) & 0xFF;
-			output[15] = (dst_addr >> 24) & 0xFF;
+			output[12] = src_addr & 0xFF;
+			output[13] = (src_addr >> 8 ) & 0xFF;
+			output[14] = (src_addr >> 16) & 0xFF;
+			output[15] = (src_addr >> 24) & 0xFF;
 			//dest address
-			output[16] = src_addr & 0xFF;
-			output[17] = (src_addr >> 8 ) & 0xFF;
-			output[18] = (src_addr >> 8 ) & 0xFF;
-			output[19] = (src_addr >> 8 ) & 0xFF;		  		  		 
+			output[16] = dst_addr & 0xFF;
+			output[17] = (dst_addr >> 8 ) & 0xFF;
+			output[18] = (dst_addr >> 8 ) & 0xFF;
+			output[19] = (dst_addr >> 8 ) & 0xFF;		  		  		 
 
 			// TODO: fill UDP headers
 			// port = 520
