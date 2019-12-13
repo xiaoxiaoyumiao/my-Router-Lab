@@ -56,24 +56,29 @@ EntryData* allocate(){
  * 删除时按照 addr 和 len 匹配。
  */
 void update(bool insert, RoutingTableEntry entry) {
+	printf("UPDATE:START UPDATING\n");
     uint32_t t_addr = entry.addr;
     if (insert){
+		printf("UPDATE:INSERT\n");
         //insert
         EntryData entry_data = {entry.if_index, entry.nexthop, entry.metric};
         //EntryData* addr_entry = table.find(t_addr);
         if (table.find(t_addr) != table.end()) {//found
+			printf("UPDATE:FOUND EXISTING\n");
 			if ((entry_data.metric < table[t_addr][entry.len].metric) || 
 				(entry_data.nexthop == table[t_addr][entry.len].nexthop)) {
 				table[t_addr][entry.len] = entry_data; //insert or rewrite
 			}	
         } else { //addr not found
+			printf("UPDATE:NOT FOUND\n");
             EntryData* tmp = NULL;
             tmp = allocate();
             tmp[entry.len] = entry_data;
             table.insert(RoutingTable::value_type(t_addr,tmp));
         }
     } else {
-        //EntryData* addr_entry = table.find(t_addr);
+		printf("UPDATE:DELETE\n");
+        //EntryData* addr_entry = table.find(t_addr);		
         if (table.find(t_addr) != table.end()) { //exist
             table[t_addr][entry.len] = {
 				.if_index = 0,
@@ -81,6 +86,7 @@ void update(bool insert, RoutingTableEntry entry) {
 				.metric = 17};
         }
     }
+	printf("FINISH UPDATING\n");
   // TODO:
 }
 

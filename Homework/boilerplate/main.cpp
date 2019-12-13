@@ -300,12 +300,12 @@ int main(int argc, char *argv[]) {
 					  //tmp_entry.metric = 16;
 					  update(false, tmp_entry);
 				  } else {
-					  tmp_entry.metric++;
+					  tmp_entry.metric++;					  
+					  if (tmp_entry.nexthop == 0) {
+						  tmp_entry.nexthop = tmp_entry.addr;
+					  }
+					  update(true, tmp_entry);
 				  }
-				  if (tmp_entry.nexthop == 0) {
-					  tmp_entry.nexthop = tmp_entry.addr;
-				  }
-				  update(true, tmp_entry);
 			  }
 			  
 		  }
