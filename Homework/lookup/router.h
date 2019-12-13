@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <map>
-
+#pragma once 
 // 路由表的一项
 typedef struct {
     uint32_t addr; // 地址
@@ -21,4 +21,5 @@ typedef uint32_t ADDR;
 typedef uint32_t LEN;
 typedef std::map<ADDR, EntryData*> RoutingTable;
 
-extern RoutingTable table;
+//extern RoutingTable table;
+

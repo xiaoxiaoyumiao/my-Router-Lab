@@ -19,7 +19,7 @@ uint32_t mask_to_len(uint32_t mask) {
 }
 
 //extern struct EntryData;
-RoutingTable table;
+extern RoutingTable table;
 extern bool validateIPChecksum(uint8_t *packet, size_t len);
 extern bool resetIPChecksum(uint8_t *packet, size_t len);
 extern void update(bool insert, RoutingTableEntry entry);
@@ -35,8 +35,8 @@ uint8_t output[2048];
 // 2: 10.0.2.1
 // 3: 10.0.3.1
 // 你可以按需进行修改，注意端序
-//in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0100000a, 0x0101000a, 0x0102000a, 0x0103000a};
-in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0100000a, 0x0101000a, 0x0102000a};
+in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0100000a, 0x0101000a, 0x0102000a, 0x0103000a};
+//in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0100000a, 0x0101000a, 0x0102000a};
 macaddr_t multi_dst_mac = {0x01,0x00,0x5e,0x00,0x00,0x09}; 
 int main(int argc, char *argv[]) {
   // 0a.
@@ -44,6 +44,8 @@ int main(int argc, char *argv[]) {
   if (res < 0) {
     return res;
   }
+  
+  printf("INIT finihsed.\n");
 
   // 0b. Add direct routes
   // For example:
@@ -52,6 +54,7 @@ int main(int argc, char *argv[]) {
   // 10.0.2.0/24 if 2
   // 10.0.3.0/24 if 3
   for (uint32_t i = 0; i < N_IFACE_ON_BOARD; i++) {
+	  printf("ENTRY CREATION: %d, %08x\n",i,addrs[i]);
     RoutingTableEntry entry = {
         .addr = addrs[i] & 0x00FFFFFF, // big endian
         .len = 24,        // small endian
@@ -61,34 +64,51 @@ int main(int argc, char *argv[]) {
     };
     update(true, entry);
   }
-
+  
+  printf("ENTRY CREATION finihsed.\n");
+  
   uint64_t last_time = 0;
   while (1) {
     uint64_t time = HAL_GetTicks();
     // when testing, you can change 30s to 5s
     if (time > last_time + 30 * 1000) {
+		printf("TIMER: START 30S CASTING.\n");
+		
 		RipPacket routingTablePacket;		
 		routingTablePacket.command = 2;
-		routingTablePacket.numEntries = table.size();
+		//routingTablePacket.numEntries = table.size();
 		RoutingTable::iterator iter;
 		
+		printf("TIMER: START CONSTRUCTING RIP PACKET.\n");
 		int index = 0;
+		int ele = 0;
 		iter = table.begin();		
 		while (iter != table.end()) {			
-			for (int i=0;i<32;++i){			
-				if (iter->second[i].metric != 17) { //valid data
-					RipEntry tmp;
-					tmp.addr = iter->first;
-					tmp.mask = len_to_mask(i);
-					tmp.nexthop = iter->second[i].nexthop; 
-					tmp.metric = iter->second[i].metric; 
-					routingTablePacket.entries[index] = tmp;
-					index++;
+			printf("TIMER: INDEX %d ELE %d\n", index, ele);
+			
+			if (iter->second != NULL) {
+				
+				for (int i=0;i<32;++i){			
+					//printf("TIMER: INDEX %d, ITER %d\n", index,i);
+					if (iter->second[i].metric != 17) { //valid data
+						RipEntry tmp;
+						tmp.addr = iter->first;
+						tmp.mask = len_to_mask(i);
+						tmp.nexthop = iter->second[i].nexthop; 
+						tmp.metric = iter->second[i].metric; 
+						routingTablePacket.entries[index] = tmp;
+						index++;
+					}
 				}
 			}
+			iter++;
+			ele++;
 		}
 		routingTablePacket.numEntries = index;
+		
+		printf("TIMER: START ASSEMBING OUTPUT FROM RIP PACKET.\n");
 		uint32_t len = assemble(&routingTablePacket, output);
+		printf("TIMER: START MULTICASTING.\n");
 		iter = table.begin();
 		while (iter != table.end()) {			
 			for (int i=0;i<32;++i){			
@@ -99,22 +119,24 @@ int main(int argc, char *argv[]) {
 						multi_dst_mac);
 				}
 			}
+			iter++;
 		}			
-      // TODO: send complete routing table to every interface
-      // ref. RFC2453 Section 3.8
-      // multicast MAC for 224.0.0.9 is 01:00:5e:00:00:09
-      printf("30s Timer\n");
-      // TODO: print complete routing table to stdout/stderr
-	  iter = table.begin();
-	  while (iter != table.end()) {			
+		// TODO: send complete routing table to every interface
+		// ref. RFC2453 Section 3.8
+		// multicast MAC for 224.0.0.9 is 01:00:5e:00:00:09
+		printf("30s Timer\n");
+		// TODO: print complete routing table to stdout/stderr
+		iter = table.begin();
+		while (iter != table.end()) {			
 			for (int i=0;i<32;++i){			
 				if (iter->second[i].metric != 17) { //valid data
 					// addr mask nexthop metric
 					printf("%08x %d %08x %d\n",iter->first,len_to_mask(i),iter->second[i].nexthop,iter->second[i].metric);			
 				}
 			}
+			iter++;
 		}
-      last_time = time;
+		last_time = time;
     }
 
     int mask = (1 << N_IFACE_ON_BOARD) - 1;
@@ -134,12 +156,17 @@ int main(int argc, char *argv[]) {
       // packet is truncated, ignore it
       continue;
     }
+	
+	printf("HAL: RECEIVED PACKET.\n");
 
     // 1. validate
     if (!validateIPChecksum(packet, res)) {
       printf("Invalid IP Checksum\n");
       continue;
     }
+	
+	printf("HAL: RECEIVED PACKET VALIDATED.\n");
+	
     in_addr_t src_addr, dst_addr;
     // TODO: extract src_addr and dst_addr from packet (big endian)
 	src_addr = ((uint32_t)packet[12]) + 
@@ -151,6 +178,7 @@ int main(int argc, char *argv[]) {
 				(((uint32_t)packet[18]) << 16) + 
 				(((uint32_t)packet[19]) << 24);
 				
+	printf("WHILE: src_addr: %08x dst_addr: %08x\n", src_addr, dst_addr);
 	
     // 2. check whether dst is me
     bool dst_is_me = false;
@@ -163,11 +191,14 @@ int main(int argc, char *argv[]) {
     // TODO: handle rip multicast address(224.0.0.9)
 
     if (dst_is_me) {
+		
+	  printf("WHILE: RECEIVED PACKET DEST IS ME.\n");
       // 3a.1
       RipPacket rip;
-      // check and validate
-      if (disassemble(packet, res, &rip)) {
+      // check and validate	  
+      if (disassemble(packet, res, &rip)) {	  
         if (rip.command == 1) {
+		printf("WHILE: RECEIVED PACKET IS REQUEST.\n");
           // 3a.3 request, ref. RFC2453 3.9.1
           // only need to respond to whole table requests in the lab
 
@@ -229,6 +260,7 @@ int main(int argc, char *argv[]) {
           // send it back
           HAL_SendIPPacket(if_index, output, rip_len + 20 + 8, src_mac);
         } else {
+		printf("WHILE: RECEIVED PACKET IS RESPONSE.\n");
           // 3a.2 response, ref. RFC2453 3.9.2
           // TODO: update routing table
 		  for (int i=0;i<rip.numEntries;++i){			  

@@ -30,16 +30,21 @@ uint32_t rev32(uint32_t given) {
     return tmp;
 }
 
-extern RoutingTable table;
+RoutingTable table;
 
-const int MAX_SIZE = 1000;
+const int MAX_SIZE = 100000;
 EntryData data_mem[MAX_SIZE];
 int MAX_LEN = 32;
 int pointer = 0;
 EntryData* allocate(){
     //memset((void*)data_mem[pointer],0,MAX_LEN*sizeof(EntryData));
-    data_mem[pointer] = {0,0};
-    pointer+=MAX_LEN;
+    for (int i=0;i<MAX_LEN;++i){
+		data_mem[pointer] = {
+				.if_index = 0,
+				.nexthop = 0,
+				.metric = 17};
+		pointer+=1;
+	}
     return &(data_mem[pointer-MAX_LEN]);
 }
 /**
@@ -70,7 +75,10 @@ void update(bool insert, RoutingTableEntry entry) {
     } else {
         //EntryData* addr_entry = table.find(t_addr);
         if (table.find(t_addr) != table.end()) { //exist
-            table[t_addr][entry.len] = {0,0,17};
+            table[t_addr][entry.len] = {
+				.if_index = 0,
+				.nexthop = 0,
+				.metric = 17};
         }
     }
   // TODO:

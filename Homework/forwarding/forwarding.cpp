@@ -23,8 +23,8 @@ bool validateIPChecksum(uint8_t *packet, size_t len) {
     sum = sum ^ 0xFFFF;
     
     return (sum == buffer[5]);  
-}
-*/
+}*/
+
 
 bool resetIPChecksum(uint8_t *packet, size_t len) {
     
