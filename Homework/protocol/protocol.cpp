@@ -1,4 +1,5 @@
 #include "rip.h"
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
@@ -144,13 +145,16 @@ bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) {
 	  //now pointing to address family identifier
 	  family_identifier = (((uint16_t)packet[ptr])<<8) + packet[ptr+1];
 	  //check family identifier  
-	  if (output->command == 1 && family_identifier != 0) return false;
-	  if (output->command == 2 && family_identifier != 2) return false; 
+	  if (output->command == 1 && family_identifier != 0) 
+	  {printf("family_id GG\n");return false;}
+  
+	  if (output->command == 2 && family_identifier != 2)
+	  {printf("family_id GG\n");return false;} 
 	  
 	  ptr += 2;
 	  //now pointing to route tag
 	  route_tag = get_int16(packet,ptr);
-	  if (route_tag != 0) return false;
+	  if (route_tag != 0) {printf("route tag GG\n");return false;}
 	  
 	  ptr += 2;
 	  //now pointing to IP address
@@ -162,7 +166,7 @@ bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) {
 	  //now pointing to subnet mask
 	  mask = get_int32(packet, ptr);
 	  //check if the mask if valid (like 11...1100..00)
-	  if (!is_mask(ntohl(mask))) return false;
+	  if (!is_mask(mask)) {printf("mask GG\n");return false;}
 	  output->entries[entry_index].mask = mask;
 	  
 	  ptr += 4;
@@ -175,7 +179,7 @@ bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) {
 	  metric = get_int32(packet, ptr);
 	  metric = get_metric(metric);
 	  //if (ntohl(metric) < 1 || ntohl(metric) > 16) return false;
-	  if (metric < 1 || metric > 16) return false;
+	  if (metric < 1 || metric > 16) {printf("metric GG\n");return false;}
 	  output->entries[entry_index].metric = metric;
 	  
 	  ptr += 4;
@@ -184,7 +188,8 @@ bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) {
   }
   
   output->numEntries = entry_index;
-	  
+
+  printf("disassemble succ!\n");
   return true;
 }
 
