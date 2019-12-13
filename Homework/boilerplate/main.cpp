@@ -251,6 +251,9 @@ int main(int argc, char *argv[]) {
       }
     }
     // TODO: handle rip multicast address(224.0.0.9)
+	if (dst_addr == 0x090000E0) {
+		dst_is_me = true;
+	}
 
     if (dst_is_me) {
 		
