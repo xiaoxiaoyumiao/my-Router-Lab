@@ -45,6 +45,110 @@ uint8_t output[2048];
 in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0100000a, 0x0101000a, 0x0102000a, 0x0103000a};
 //in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0100000a, 0x0101000a, 0x0102000a};
 macaddr_t multi_dst_mac = {0x01,0x00,0x5e,0x00,0x00,0x09}; 
+
+uint32_t packup_output(RipPacket pkt, in_addr_t src_addr, in_addr_t dst_addr) {
+	// version = 4, length = 5(*4byte)
+	output[0] = 0x45;
+	// type of service = 0
+	output[1] = 0x00;
+	// ID = 0
+	output[4] = 0;
+	output[5] = 0;
+	// flags, fragmented offset = 0
+	output[6] = 0;
+	output[7] = 0;
+	// time to live = 1
+	output[8] = 0x01;
+	// protocol = 17 (UDP)
+	output[9] = 0x11;
+
+	//in_addr_t src_addr = addrs[i];
+	//in_addr_t dst_addr = 0x090000E0;
+	// source address
+	output[12] = src_addr & 0xFF;
+	output[13] = (src_addr >> 8 ) & 0xFF;
+	output[14] = (src_addr >> 16) & 0xFF;
+	output[15] = (src_addr >> 24) & 0xFF;
+	//dest address
+	output[16] = dst_addr & 0xFF;
+	output[17] = (dst_addr >> 8 ) & 0xFF;
+	output[18] = (dst_addr >> 16) & 0xFF;
+	output[19] = (dst_addr >> 24) & 0xFF;		  		  		 
+
+	// TODO: fill UDP headers
+	// port = 520
+	output[20] = 0x02;
+	output[21] = 0x08;
+	output[22] = 0x02;
+	output[23] = 0x08;
+	// UDP checksum = 0
+	output[26] = 0x00;
+	output[27] = 0x00;
+
+	// assembleRIP
+	uint32_t rip_len = assemble(&pkt, &output[20 + 8]);
+	uint32_t total_len = rip_len + 28;
+	uint32_t udp_len = rip_len + 8;
+	//set total length
+	output[2] = total_len >> 8;
+	output[3] = total_len & 0xFF;
+	//set UDP length
+	output[24] = udp_len >> 8;
+	output[25] = udp_len & 0xFF;
+
+	// TODO: checksum calculation for ip and udp
+	// if you don't want to calculate udp checksum, set it to zero
+	resetIPChecksum(output, total_len);
+
+	//printf("TIMER: START ASSEMBING OUTPUT FROM RIP PACKET.\n");
+	//uint32_t len = assemble(&routingTablePacket, output+28);
+	//printf("TIMER: START MULTICASTING.\n");
+	
+	for (int i=0;i<28;++i) {
+	  printf("%02x ",output[i]);
+	  if (i % 4 == 0){
+		  printf("\n");
+	  }
+	}
+	return total_len;
+
+}
+
+void packup_routing_table_packet(RipPacket* routingTablePacket) {
+	//RipPacket routingTablePacket;		
+	routingTablePacket->command = 2;
+	//routingTablePacket.numEntries = table.size();
+	RoutingTable::iterator iter;
+	
+	printf("TIMER: START CONSTRUCTING RIP PACKET.\n");
+	int index = 0;
+	int ele = 0;
+	iter = table.begin();		
+	while (iter != table.end()) {			
+		printf("TIMER: INDEX %d ELE %d\n", index, ele);
+		
+		if (iter->second != NULL) {
+			
+			for (int i=0;i<32;++i){			
+				//printf("TIMER: INDEX %d, ITER %d\n", index,i);
+				if (iter->second[i].metric != 17) { //valid data
+					RipEntry tmp;
+					tmp.addr = iter->first;
+					tmp.mask = len_to_mask(i);
+					tmp.nexthop = iter->second[i].nexthop; 
+					tmp.metric = iter->second[i].metric; 
+					routingTablePacket->entries[index] = tmp;
+					index++;
+				}
+			}
+		}
+		iter++;
+		ele++;
+	}
+	routingTablePacket->numEntries = index;
+	
+}
+
 int main(int argc, char *argv[]) {
   // 0a.
   int res = HAL_Init(1, addrs);
@@ -80,107 +184,11 @@ int main(int argc, char *argv[]) {
     // when testing, you can change 30s to 5s
     if (time > last_time + 5 * 1000) {
 		printf("TIMER: START 30S CASTING.\n");
-		
-		RipPacket routingTablePacket;		
-		routingTablePacket.command = 2;
-		//routingTablePacket.numEntries = table.size();
-		RoutingTable::iterator iter;
-		
-		printf("TIMER: START CONSTRUCTING RIP PACKET.\n");
-		int index = 0;
-		int ele = 0;
-		iter = table.begin();		
-		while (iter != table.end()) {			
-			printf("TIMER: INDEX %d ELE %d\n", index, ele);
-			
-			if (iter->second != NULL) {
-				
-				for (int i=0;i<32;++i){			
-					//printf("TIMER: INDEX %d, ITER %d\n", index,i);
-					if (iter->second[i].metric != 17) { //valid data
-						RipEntry tmp;
-						tmp.addr = iter->first;
-						tmp.mask = len_to_mask(i);
-						tmp.nexthop = iter->second[i].nexthop; 
-						tmp.metric = iter->second[i].metric; 
-						routingTablePacket.entries[index] = tmp;
-						index++;
-					}
-				}
-			}
-			iter++;
-			ele++;
-		}
-		routingTablePacket.numEntries = index;
-		
 		for (int i=0;i<N_IFACE_ON_BOARD;++i) {		
-			// version = 4, length = 5(*4byte)
-			output[0] = 0x45;
-			// type of service = 0
-			output[1] = 0x00;
-			// ID = 0
-			output[4] = 0;
-			output[5] = 0;
-			// flags, fragmented offset = 0
-			output[6] = 0;
-			output[7] = 0;
-			// time to live = 1
-			output[8] = 0x01;
-			// protocol = 17 (UDP)
-			output[9] = 0x11;
-
-			in_addr_t src_addr = addrs[i];
-			in_addr_t dst_addr = 0x090000E0;
-			// source address
-			output[12] = src_addr & 0xFF;
-			output[13] = (src_addr >> 8 ) & 0xFF;
-			output[14] = (src_addr >> 16) & 0xFF;
-			output[15] = (src_addr >> 24) & 0xFF;
-			//dest address
-			output[16] = dst_addr & 0xFF;
-			output[17] = (dst_addr >> 8 ) & 0xFF;
-			output[18] = (dst_addr >> 8 ) & 0xFF;
-			output[19] = (dst_addr >> 8 ) & 0xFF;		  		  		 
-
-			// TODO: fill UDP headers
-			// port = 520
-			output[20] = 0x02;
-			output[21] = 0x08;
-			output[22] = 0x02;
-			output[23] = 0x08;
-			// UDP checksum = 0
-			output[26] = 0x00;
-			output[27] = 0x00;
-
-			// assembleRIP
-			uint32_t rip_len = assemble(&routingTablePacket, &output[20 + 8]);
-			uint32_t total_len = rip_len + 28;
-			uint32_t udp_len = rip_len + 8;
-			//set total length
-			output[2] = total_len >> 8;
-			output[3] = total_len & 0xFF;
-			//set UDP length
-			output[24] = udp_len >> 8;
-			output[25] = udp_len & 0xFF;
-
-			// TODO: checksum calculation for ip and udp
-			// if you don't want to calculate udp checksum, set it to zero
-			resetIPChecksum(output, total_len);
-
-			printf("TIMER: START ASSEMBING OUTPUT FROM RIP PACKET.\n");
-			uint32_t len = assemble(&routingTablePacket, output+28);
-			printf("TIMER: START MULTICASTING.\n");
-
-			for (int i=0;i<28;++i) {
-			  printf("%02x ",output[i]);
-			  if (i % 4 == 0){
-				  printf("\n");
-			  }
-			}
-			HAL_SendIPPacket(i,
-				output,
-				total_len,
-				multi_dst_mac);
+			RipPacket routingTablePacket;	
+			packup_routing_table_packet(&routingTablePacket);
+			uint32_t total_len = packup_output(routingTablePacket, addrs[i], 0x090000E0);			
+			HAL_SendIPPacket(i, output, total_len, multi_dst_mac);
 			
 		}		
 		// TODO: send complete routing table to every interface
@@ -188,6 +196,7 @@ int main(int argc, char *argv[]) {
 		// multicast MAC for 224.0.0.9 is 01:00:5e:00:00:09
 		printf("30s Timer\n");
 		// TODO: print complete routing table to stdout/stderr
+		RoutingTable::iterator iter;
 		iter = table.begin();
 		while (iter != table.end()) {			
 			for (int i=0;i<32;++i){			
@@ -262,104 +271,18 @@ int main(int argc, char *argv[]) {
       RipPacket rip;
       // check and validate	  
       if (disassemble(packet, res, &rip)) {	  
-        if (rip.command == 1) {
-		printf("WHILE: RECEIVED PACKET IS REQUEST.\n");
-          // 3a.3 request, ref. RFC2453 3.9.1
-          // only need to respond to whole table requests in the lab
+		if (rip.command == 1) {
+			printf("WHILE: RECEIVED PACKET IS REQUEST.\n");
+			  // 3a.3 request, ref. RFC2453 3.9.1
+			  // only need to respond to whole table requests in the lab
 
-          RipPacket resp;
-          // TODO: fill resp
-		resp.command = 2;
-		//resp.numEntries = table.size();
-		RoutingTable::iterator iter;
-		
-		printf("TIMER: START CONSTRUCTING RIP PACKET.\n");
-		int index = 0;
-		int ele = 0;
-		iter = table.begin();		
-		while (iter != table.end()) {			
-			printf("TIMER: INDEX %d ELE %d\n", index, ele);
+			RipPacket resp;
+			// TODO: fill resp
+			packup_routing_table_packet(&resp);
+			uint32_t total_len = packup_output(resp, dst_addr, src_addr);      
+			// send it back
+			HAL_SendIPPacket(if_index, output, total_len, src_mac);
 			
-			if (iter->second != NULL) {
-				
-				for (int i=0;i<32;++i){			
-					//printf("TIMER: INDEX %d, ITER %d\n", index,i);
-					if (iter->second[i].metric != 17) { //valid data
-						RipEntry tmp;
-						tmp.addr = iter->first;
-						tmp.mask = len_to_mask(i);
-						tmp.nexthop = iter->second[i].nexthop; 
-						tmp.metric = iter->second[i].metric; 
-						resp.entries[index] = tmp;
-						index++;
-					}
-				}
-			}
-			iter++;
-			ele++;
-		}
-		resp.numEntries = index;
-
-          // TODO: fill IP headers
-		  // version = 4, length = 5(*4byte)
-          output[0] = 0x45;
-		  // type of service = 0
-		  output[1] = 0x00;
-		  // ID = 0
-		  output[4] = 0;
-		  output[5] = 0;
-		  // flags, fragmented offset = 0
-		  output[6] = 0;
-		  output[7] = 0;
-		  // time to live = 1
-		  output[8] = 0x01;
-		  // protocol = 17 (UDP)
-		  output[9] = 0x11;
-		  
-		  // source address
-		  output[12] = dst_addr & 0xFF;
-		  output[13] = (dst_addr >> 8 ) & 0xFF;
-		  output[14] = (dst_addr >> 16) & 0xFF;
-		  output[15] = (dst_addr >> 24) & 0xFF;
-		  //dest address
-		  output[16] = src_addr & 0xFF;
-		  output[17] = (src_addr >> 8 ) & 0xFF;
-		  output[18] = (src_addr >> 8 ) & 0xFF;
-		  output[19] = (src_addr >> 8 ) & 0xFF;		  		  		 
-
-          // TODO: fill UDP headers
-          // port = 520
-          output[20] = 0x02;
-          output[21] = 0x08;
-		  output[22] = 0x02;
-		  output[23] = 0x08;
-		  // UDP checksum = 0
-		  output[26] = 0x00;
-		  output[27] = 0x00;
-
-          // assembleRIP
-          uint32_t rip_len = assemble(&resp, &output[20 + 8]);
-		  uint32_t total_len = rip_len + 28;
-		  uint32_t udp_len = rip_len + 8;
-		  //set total length
-		  output[2] = total_len >> 8;
-		  output[3] = total_len & 0xFF;
-		  //set UDP length
-		  output[24] = udp_len >> 8;
-		  output[25] = udp_len & 0xFF;
- 
-          // TODO: checksum calculation for ip and udp
-          // if you don't want to calculate udp checksum, set it to zero
-		  resetIPChecksum(output, total_len);
-		  for (int i=0;i<28;++i) {
-			  printf("%02x ",output[i]);
-			  if (i % 4 == 0){
-				  printf("\n");
-			  }
-		  }
-
-          // send it back
-          HAL_SendIPPacket(if_index, output, rip_len + 20 + 8, src_mac);
         } else {
 		printf("WHILE: RECEIVED PACKET IS RESPONSE.\n");
           // 3a.2 response, ref. RFC2453 3.9.2
