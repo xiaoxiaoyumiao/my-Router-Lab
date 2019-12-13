@@ -9,7 +9,14 @@
 #include <map>
 
 uint32_t len_to_mask(uint32_t len) {	
-	return len==0?0:~((1<<(32-len))-1);
+	uint32_t ret = 0;
+	for (int i=0;i<len;++i){
+		ret = (ret<<1)+1;
+	}
+	for (int i=len;i<32;++i){
+		ret <<= 1;
+	}
+	return ret;
 }
 
 uint32_t mask_to_len(uint32_t mask) {
@@ -131,7 +138,7 @@ int main(int argc, char *argv[]) {
 			for (int i=0;i<32;++i){			
 				if (iter->second[i].metric != 17) { //valid data
 					// addr mask nexthop metric
-					printf("%08x %d %08x %d\n",iter->first,len_to_mask(i),iter->second[i].nexthop,iter->second[i].metric);			
+					printf("%08x %d %08x %08x %d\n",iter->first,iter->second[i].if_index,len_to_mask(i),iter->second[i].nexthop,iter->second[i].metric);			
 				}
 			}
 			iter++;
@@ -271,9 +278,10 @@ int main(int argc, char *argv[]) {
 				.nexthop = rip.entries[i].nexthop,     // big endian, means direct
 				.metric = rip.entries[i].metric 
 			  };
-			  if (1<=tmp_entry.metric && tmp_entry.metric<=16){
-				  if (tmp_entry.metric >= 15) {
-					  tmp_entry.metric = 16;
+			  if (1<=tmp_entry.metric && tmp_entry.metric<=15){
+				  if (tmp_entry.metric == 15) {
+					  //tmp_entry.metric = 16;
+					  update(false, tmp_entry);
 				  } else {
 					  tmp_entry.metric++;
 				  }

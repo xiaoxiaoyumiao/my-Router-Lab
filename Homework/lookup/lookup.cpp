@@ -98,7 +98,7 @@ bool query(uint32_t addr, uint32_t *nexthop, uint32_t *if_index) {
         //EntryData* addr_entry = table.find(t_addr);
         if (table.find(t_addr) != table.end()) {//found
             EntryData tmp = table[t_addr][32-i];
-            if (tmp.nexthop != 0 || tmp.if_index != 0){
+            if (tmp.metric>0 && tmp.metric<16 && (tmp.nexthop != 0 || tmp.if_index != 0)){
                 *nexthop = tmp.nexthop;
                 *if_index = tmp.if_index;
                 return true;
