@@ -21,7 +21,7 @@ uint32_t len_to_mask(uint32_t len) {
 
 uint32_t mask_to_len(uint32_t mask) {
 	uint32_t ret = 32;
-	while (!(mask & 1)) {ret--;mask>>=1;}
+	while (!(mask & 1) && ret) {ret--;mask>>=1;}
 	return ret;
 }
 
