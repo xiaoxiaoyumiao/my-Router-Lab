@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
 			resetIPChecksum(output, total_len);
 
 			printf("TIMER: START ASSEMBING OUTPUT FROM RIP PACKET.\n");
-			uint32_t len = assemble(&routingTablePacket, output);
+			uint32_t len = assemble(&routingTablePacket, output+28);
 			printf("TIMER: START MULTICASTING.\n");
 
 			for (int i=0;i<28;++i) {
