@@ -9,7 +9,7 @@
 #include <map>
 
 uint32_t len_to_mask(uint32_t len) {	
-	return ~((1<<(32-len))-1);
+	return len==0?0:~((1<<(32-len))-1);
 }
 
 uint32_t mask_to_len(uint32_t mask) {
@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
   while (1) {
     uint64_t time = HAL_GetTicks();
     // when testing, you can change 30s to 5s
-    if (time > last_time + 30 * 1000) {
+    if (time > last_time + 5 * 1000) {
 		printf("TIMER: START 30S CASTING.\n");
 		
 		RipPacket routingTablePacket;		
