@@ -38,11 +38,26 @@ uint32_t get_int32(const uint8_t* array, uint8_t ptr) {
 				((uint32_t)array[ptr]);
 }
 
+uint32_t r_get_int32(const uint8_t* array, uint8_t ptr) {
+	return (((uint32_t)array[ptr])<<24) + 
+				(((uint32_t)array[ptr+1])<<16) + 
+				(((uint32_t)array[ptr+2])<<8) + 
+				((uint32_t)array[ptr+3]);
+}
+
 bool set_int32(uint32_t num, uint8_t* array, uint8_t ptr) {
 	array[ptr+3] = (uint8_t)((num >> 24) & 0xFF);
 	array[ptr+2] = (uint8_t)((num >> 16) & 0xFF);
 	array[ptr+1] = (uint8_t)((num >> 8) & 0xFF);
 	array[ptr] = (uint8_t)((num) & 0xFF);	
+	return true;
+}
+
+bool r_set_int32(uint32_t num, uint8_t* array, uint8_t ptr) {
+	array[ptr+3] = (uint8_t)((num) & 0xFF);
+	array[ptr+2] = (uint8_t)((num >> 8) & 0xFF);
+	array[ptr+1] = (uint8_t)((num >> 16) & 0xFF);
+	array[ptr] = (uint8_t)((num >> 24) & 0xFF);	
 	return true;
 }
 
@@ -164,7 +179,7 @@ bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) {
 					
 	  ptr += 4;
 	  //now pointing to subnet mask
-	  mask = get_int32(packet, ptr);
+	  mask = r_get_int32(packet, ptr);
 	  //check if the mask if valid (like 11...1100..00)
 	  if (!is_mask(mask)) {printf("mask GG\n");return false;}
 	  output->entries[entry_index].mask = mask;
@@ -176,7 +191,7 @@ bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) {
 	  
 	  ptr += 4;
 	  //now pointing to metric
-	  metric = get_int32(packet, ptr);
+	  metric = r_get_int32(packet, ptr);
 	  metric = get_metric(metric);
 	  //if (ntohl(metric) < 1 || ntohl(metric) > 16) return false;
 	  if (metric < 1 || metric > 16) {printf("metric GG\n");return false;}
@@ -230,13 +245,13 @@ uint32_t assemble(const RipPacket *rip, uint8_t *buffer) {
 	  set_int32(rip->entries[i].addr,buffer,ptr);
 	  ptr += 4;
 	  //construct mask
-	  set_int32(rip->entries[i].mask,buffer,ptr);
+	  r_set_int32(rip->entries[i].mask,buffer,ptr);
 	  ptr += 4;
 	  //construct next hop
 	  set_int32(rip->entries[i].nexthop,buffer,ptr);
 	  ptr += 4;
 	  //construct metric (need to reverse?)
-	  set_int32(rip->entries[i].metric,buffer,ptr);
+	  r_set_int32(rip->entries[i].metric,buffer,ptr);
 	  ptr += 4;	  
   }
   
