@@ -292,7 +292,7 @@ int main(int argc, char *argv[]) {
 				.addr = rip.entries[i].addr, // big endian
 				.len = mask_to_len(rip.entries[i].mask), // small endian
 				.if_index = if_index,    // small endian
-				.nexthop = rip.entries[i].nexthop,     // big endian, means direct
+				.nexthop = src_addr,     // big endian, means direct
 				.metric = rip.entries[i].metric 
 			  };
 			  if (1<=tmp_entry.metric && tmp_entry.metric<=15){
@@ -301,9 +301,11 @@ int main(int argc, char *argv[]) {
 					  update(false, tmp_entry);
 				  } else {
 					  tmp_entry.metric++;					  
+					  /*
 					  if (tmp_entry.nexthop == 0) {
-						  tmp_entry.nexthop = tmp_entry.addr;
+						  tmp_entry.nexthop = src_addr;
 					  }
+					  */
 					  update(true, tmp_entry);
 				  }
 			  }
