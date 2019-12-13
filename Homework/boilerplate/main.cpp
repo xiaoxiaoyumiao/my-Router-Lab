@@ -1,12 +1,27 @@
 #include "rip.h"
 #include "router.h"
 #include "router_hal.h"
+//#include "lookup.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <map>
 
+uint32_t len_to_mask(uint32_t len) {	
+	return ~((1<<(32-len))-1);
+}
+
+uint32_t mask_to_len(uint32_t mask) {
+	uint32_t ret = 32;
+	while (!(mask & 1)) {ret--;mask>>=1;}
+	return ret;
+}
+
+//extern struct EntryData;
+RoutingTable table;
 extern bool validateIPChecksum(uint8_t *packet, size_t len);
+extern bool resetIPChecksum(uint8_t *packet, size_t len);
 extern void update(bool insert, RoutingTableEntry entry);
 extern bool query(uint32_t addr, uint32_t *nexthop, uint32_t *if_index);
 extern bool forward(uint8_t *packet, size_t len);
@@ -22,7 +37,7 @@ uint8_t output[2048];
 // 你可以按需进行修改，注意端序
 in_addr_t addrs[N_IFACE_ON_BOARD] = {0x0100000a, 0x0101000a, 0x0102000a,
                                      0x0103000a};
-
+macaddr_t multi_dst_mac = {0x01,0x00,0x5e,0x00,0x00,0x09}; 
 int main(int argc, char *argv[]) {
   // 0a.
   int res = HAL_Init(1, addrs);
@@ -41,7 +56,8 @@ int main(int argc, char *argv[]) {
         .addr = addrs[i] & 0x00FFFFFF, // big endian
         .len = 24,        // small endian
         .if_index = i,    // small endian
-        .nexthop = 0      // big endian, means direct
+        .nexthop = 0,     // big endian, means direct
+		.metric = 1
     };
     update(true, entry);
   }
@@ -51,11 +67,53 @@ int main(int argc, char *argv[]) {
     uint64_t time = HAL_GetTicks();
     // when testing, you can change 30s to 5s
     if (time > last_time + 30 * 1000) {
+		RipPacket routingTablePacket;		
+		routingTablePacket.command = 2;
+		routingTablePacket.numEntries = table.size();
+		RoutingTable::iterator iter;
+		
+		int index = 0;
+		iter = table.begin();		
+		while (iter != table.end()) {			
+			for (int i=0;i<32;++i){			
+				if (iter->second[i].metric != 17) { //valid data
+					RipEntry tmp;
+					tmp.addr = iter->first;
+					tmp.mask = len_to_mask(i);
+					tmp.nexthop = iter->second[i].nexthop; 
+					tmp.metric = iter->second[i].metric; 
+					routingTablePacket.entries[index] = tmp;
+					index++;
+				}
+			}
+		}
+		routingTablePacket.numEntries = index;
+		uint32_t len = assemble(&routingTablePacket, output);
+		iter = table.begin();
+		while (iter != table.end()) {			
+			for (int i=0;i<32;++i){			
+				if (iter->second[i].metric != 17 && iter->second[i].nexthop == 0) { //direct link
+					HAL_SendIPPacket(iter->second[i].if_index,
+						output,
+						len,
+						multi_dst_mac);
+				}
+			}
+		}			
       // TODO: send complete routing table to every interface
       // ref. RFC2453 Section 3.8
       // multicast MAC for 224.0.0.9 is 01:00:5e:00:00:09
       printf("30s Timer\n");
       // TODO: print complete routing table to stdout/stderr
+	  iter = table.begin();
+	  while (iter != table.end()) {			
+			for (int i=0;i<32;++i){			
+				if (iter->second[i].metric != 17) { //valid data
+					// addr mask nexthop metric
+					printf("%08x %d %08x %d\n",iter->first,len_to_mask(i),iter->second[i].nexthop,iter->second[i].metric);			
+				}
+			}
+		}
       last_time = time;
     }
 
@@ -84,7 +142,16 @@ int main(int argc, char *argv[]) {
     }
     in_addr_t src_addr, dst_addr;
     // TODO: extract src_addr and dst_addr from packet (big endian)
-
+	src_addr = ((uint32_t)packet[12]) + 
+				(((uint32_t)packet[13]) << 8) + 
+				(((uint32_t)packet[14]) << 16) + 
+				(((uint32_t)packet[15]) << 24);
+	dst_addr = ((uint32_t)packet[16]) + 
+				(((uint32_t)packet[17]) << 8) + 
+				(((uint32_t)packet[18]) << 16) + 
+				(((uint32_t)packet[19]) << 24);
+				
+	
     // 2. check whether dst is me
     bool dst_is_me = false;
     for (int i = 0; i < N_IFACE_ON_BOARD; i++) {
@@ -108,24 +175,83 @@ int main(int argc, char *argv[]) {
           // TODO: fill resp
 
           // TODO: fill IP headers
+		  // version = 4, length = 5(*4byte)
           output[0] = 0x45;
+		  // type of service = 0
+		  output[1] = 0x00;
+		  // ID = 0
+		  output[4] = 0;
+		  output[5] = 0;
+		  // flags, fragmented offset = 0
+		  output[6] = 0;
+		  output[7] = 0;
+		  // time to live = 1
+		  output[8] = 0x01;
+		  // protocol = 17 (UDP)
+		  output[9] = 0x11;
+		  
+		  // source address
+		  output[12] = dst_addr & 0xFF;
+		  output[13] = (dst_addr >> 8 ) & 0xFF;
+		  output[14] = (dst_addr >> 16) & 0xFF;
+		  output[15] = (dst_addr >> 24) & 0xFF;
+		  //dest address
+		  output[16] = src_addr & 0xFF;
+		  output[17] = (src_addr >> 8 ) & 0xFF;
+		  output[18] = (src_addr >> 8 ) & 0xFF;
+		  output[19] = (src_addr >> 8 ) & 0xFF;		  		  		 
 
           // TODO: fill UDP headers
           // port = 520
           output[20] = 0x02;
           output[21] = 0x08;
+		  output[22] = 0x02;
+		  output[23] = 0x08;
+		  // UDP checksum = 0
+		  output[26] = 0x00;
+		  output[27] = 0x00;
 
           // assembleRIP
           uint32_t rip_len = assemble(&resp, &output[20 + 8]);
-
+		  uint32_t total_len = rip_len + 28;
+		  uint32_t udp_len = rip_len + 8;
+		  //set total length
+		  output[2] = total_len >> 8;
+		  output[3] = total_len & 0xFF;
+		  //set UDP length
+		  output[24] = udp_len >> 8;
+		  output[25] = udp_len & 0xFF;
+ 
           // TODO: checksum calculation for ip and udp
           // if you don't want to calculate udp checksum, set it to zero
+		  resetIPChecksum(output, total_len);
 
           // send it back
           HAL_SendIPPacket(if_index, output, rip_len + 20 + 8, src_mac);
         } else {
           // 3a.2 response, ref. RFC2453 3.9.2
           // TODO: update routing table
+		  for (int i=0;i<rip.numEntries;++i){			  
+			  RoutingTableEntry tmp_entry = {
+				.addr = rip.entries[i].addr, // big endian
+				.len = mask_to_len(rip.entries[i].mask), // small endian
+				.if_index = if_index,    // small endian
+				.nexthop = rip.entries[i].nexthop,     // big endian, means direct
+				.metric = rip.entries[i].metric 
+			  };
+			  if (1<=tmp_entry.metric && tmp_entry.metric<=16){
+				  if (tmp_entry.metric >= 15) {
+					  tmp_entry.metric = 16;
+				  } else {
+					  tmp_entry.metric++;
+				  }
+				  if (tmp_entry.nexthop == 0) {
+					  tmp_entry.nexthop = tmp_entry.addr;
+				  }
+				  update(true, tmp_entry);
+			  }
+			  
+		  }
           // new metric = ?
           // update metric, if_index, nexthop
           // HINT: handle nexthop = 0 case

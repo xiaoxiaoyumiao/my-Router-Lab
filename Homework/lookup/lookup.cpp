@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <map>
 #include <string.h>
+//#include "lookup.h"
 /*
   RoutingTable Entry 的定义如下：
   typedef struct {
@@ -10,6 +11,7 @@
     uint32_t len; // 小端序，前缀长度
     uint32_t if_index; // 小端序，出端口编号
     uint32_t nexthop; // 大端序，下一跳的 IPv4 地址
+	uint32_t metric; 
   } RoutingTableEntry;
 
   约定 addr 和 nexthop 以 **大端序** 存储。
@@ -28,14 +30,7 @@ uint32_t rev32(uint32_t given) {
     return tmp;
 }
 
-typedef struct {    
-    uint32_t if_index; // 小端序，出端口编号
-    uint32_t nexthop; // 大端序，下一跳的 IPv4 地址
-} EntryData;
-typedef uint32_t ADDR;
-typedef uint32_t LEN;
-typedef std::map<ADDR, EntryData*> RoutingTable;
-RoutingTable table;
+extern RoutingTable table;
 
 const int MAX_SIZE = 1000;
 EntryData data_mem[MAX_SIZE];
@@ -59,10 +54,13 @@ void update(bool insert, RoutingTableEntry entry) {
     uint32_t t_addr = entry.addr;
     if (insert){
         //insert
-        EntryData entry_data = {entry.if_index, entry.nexthop};
+        EntryData entry_data = {entry.if_index, entry.nexthop, entry.metric};
         //EntryData* addr_entry = table.find(t_addr);
         if (table.find(t_addr) != table.end()) {//found
-            table[t_addr][entry.len] = entry_data; //insert or rewrite
+			if ((entry_data.metric < table[t_addr][entry.len].metric) || 
+				(entry_data.nexthop == table[t_addr][entry.len].nexthop)) {
+				table[t_addr][entry.len] = entry_data; //insert or rewrite
+			}	
         } else { //addr not found
             EntryData* tmp = NULL;
             tmp = allocate();
@@ -72,7 +70,7 @@ void update(bool insert, RoutingTableEntry entry) {
     } else {
         //EntryData* addr_entry = table.find(t_addr);
         if (table.find(t_addr) != table.end()) { //exist
-            table[t_addr][entry.len] = {0,0};
+            table[t_addr][entry.len] = {0,0,17};
         }
     }
   // TODO:
