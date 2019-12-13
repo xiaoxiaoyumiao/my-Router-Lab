@@ -174,7 +174,8 @@ bool disassemble(const uint8_t *packet, uint32_t len, RipPacket *output) {
 	  //now pointing to metric
 	  metric = get_int32(packet, ptr);
 	  metric = get_metric(metric);
-	  if (ntohl(metric) < 1 || ntohl(metric) > 16) return false;
+	  //if (ntohl(metric) < 1 || ntohl(metric) > 16) return false;
+	  if (metric < 1 || metric > 16) return false;
 	  output->entries[entry_index].metric = metric;
 	  
 	  ptr += 4;
